@@ -1,0 +1,72 @@
+version: '3'
+
+volumes:
+  author-repository:
+  publish-repository:
+
+services:
+  author:
+    image: aem-author:dev
+    build: ./aem-author
+    ports:
+      - "4502:4502"
+    volumes:
+      - author-repository:/opt/aem/crx-quickstart/repository
+      - ./logs/author:/opt/aem/crx-quickstart/logs
+    stop_grace_period: 3m
+    networks:
+      - aemnetwork
+    deploy:
+      resources:
+        reservations:
+          memory: 1536M
+  publish:
+    image: aem-publish:latest
+    build: ./aem-publish
+    ports:
+      - "4503:4503"
+    networks:
+      - aemnetwork
+    volumes:
+      - publish-repository:/opt/aem/crx-quickstart/repository
+      - ./logs/publish:/opt/aem/crx-quickstart/logs
+    stop_grace_period: 3m
+    deploy:
+      resources:
+        reservations:
+          memory: 1536M
+  dispatcher:
+    image: aem-dispatcher:latest
+    ports:
+      - "8080:80"
+    environment:
+      AEM_HOST: publish
+      AEM_PORT: 4503
+      DISP_LOG_LEVEL: Debug
+    volumes:
+      - ${DISPATCHER_CONFIG}/conf.dispatcher.d:/tmp/dispatcher/conf.dispatcher.d
+      - ${DISPATCHER_CONFIG}/conf.d:/tmp/dispatcher/conf.d
+      - ./logs/dispatcher:/etc/httpd/logs
+    depends_on:
+      - "publish"
+    networks:
+      aemnetwork:
+        aliases:
+          - dispatcher
+          - aemsite.dev
+  nginx:
+    image: aem-nginx:latest
+    build: ./aem-nginx
+    ports:
+      - "443:443"
+      - "80:80"
+    depends_on:
+      - "dispatcher"
+    networks:
+      - aemnetwork
+    extra_hosts:
+      - "aemsite.dev:127.0.0.1"
+
+networks:
+  aemnetwork:
+    driver: bridge
